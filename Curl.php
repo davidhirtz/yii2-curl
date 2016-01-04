@@ -2,7 +2,7 @@
 /**
  * @author David Hirtz <hello@davidhirtz.com>
  * @copyright Copyright (c) 2016 David Hirtz
- * @version 1.1.0
+ * @version 1.1.1
  */
 
 namespace davidhirtz\yii2\curl;
@@ -172,8 +172,7 @@ class Curl
 		 */
 		$this->_curl=curl_init($url);
 		curl_setopt_array($this->_curl, $this->getOptions());
-		$body=curl_exec($this->_curl);
-
+		$this->response=$body=curl_exec($this->_curl);
 		$this->errorCode=curl_errno($this->_curl) ?: false;
 
 		if($this->errorCode)
@@ -192,23 +191,29 @@ class Curl
 			}
 		}
 
-		$headerSize=$this->getInfo(CURLINFO_HEADER_SIZE);
-
-		$this->response=(strlen($this->response)===$headerSize) ? '' : substr($body, $headerSize);
-		$this->responseCode=curl_getinfo($this->_curl, CURLINFO_HTTP_CODE);
-
-		if($headerSize)
+		/**
+		 * Get headers.
+		 */
+		if($this->getOption(CURLOPT_HEADER))
 		{
-			$headers=rtrim(substr($body, 0, $headerSize));
-			$headers=array_slice(preg_split('/(\\r?\\n)/', $headers), 1);
+			$headerSize=$this->getInfo(CURLINFO_HEADER_SIZE);
 
-			foreach($headers as $header)
+			$this->response=(strlen($this->response)===$headerSize) ? '' : substr($body, $headerSize);
+			$this->responseCode=curl_getinfo($this->_curl, CURLINFO_HTTP_CODE);
+
+			if($headerSize)
 			{
-				$tmp=explode(': ', $header);
+				$headers=rtrim(substr($body, 0, $headerSize));
+				$headers=array_slice(preg_split('/(\\r?\\n)/', $headers), 1);
 
-				if(count($tmp)==2)
+				foreach($headers as $header)
 				{
-					$this->_headers[$tmp[0]]=$tmp[1];
+					$tmp=explode(': ', $header);
+
+					if(count($tmp)==2)
+					{
+						$this->_headers[$tmp[0]]=$tmp[1];
+					}
 				}
 			}
 		}
@@ -378,7 +383,7 @@ class Curl
 	 */
 	public function withHeaders()
 	{
-		return $this->setOption(CURLOPT_HEADER, 1);
+		return $this->setOption(CURLOPT_HEADER, true);
 	}
 
 	/**
