@@ -1,13 +1,13 @@
 {
-    "name": "linslin/yii2-curl",
-    "description": "Easy and nice cURL extension with RESTful support for Yii2",
+    "name": "davidhirtz/yii2-curl",
+    "description": "cURL extension with RESTful support for Yii2",
     "type": "yii2-extension",
     "keywords": ["yii2","extension"," curl", "RESTful"],
-    "license": "MIT",
+	"license": "BSD-3-Clause",
     "authors": [
         {
-            "name": "Nils Gajsek",
-            "email": "info@linslin.org"
+            "name": "David Hirtz",
+            "email": "hello@davidhirtz.com"
         }
     ],
     "require": {
@@ -16,7 +16,7 @@
     },
     "autoload": {
         "psr-4": {
-            "linslin\\yii2\\curl\\": ""
+            "davidhirtz\\yii2\\curl\\": ""
         }
     }
 }
