@@ -2,7 +2,7 @@
 /**
  * @author David Hirtz <hello@davidhirtz.com>
  * @copyright Copyright (c) 2016 David Hirtz
- * @version 1.0.0
+ * @version 1.1.0
  */
 
 namespace davidhirtz\yii2\curl;
@@ -39,16 +39,19 @@ class Curl
 	public $errorCode=null;
 
 	/**
-	 * @var array HTTP-Status Code
-	 * Custom options holder
+	 * @var array custom cURL options
 	 */
-	private $_options=array();
+	private $_options=[];
 
 	/**
-	 * @var resource
-	 * Holds cURL-Handler
+	 * @var resource cURL handler
 	 */
 	private $_curl=null;
+
+	/**
+	 * @var array
+	 */
+	private $_headers=[];
 
 	/**
 	 * @var array default curl options
@@ -70,9 +73,13 @@ class Curl
 	 * @param boolean $json
 	 * @return mixed
 	 */
-	public function get($url, $params=array(), $json=false)
+	public function get($url, $params=[], $json=false)
 	{
-		$url=rtrim($url, '&').(strpos($url, '?')===false ? '?' : '&').http_build_query($params);
+		if($params)
+		{
+			$url=rtrim($url, '&').(strpos($url, '?')===false ? '?' : '&').http_build_query($params);
+		}
+
 		return $this->request('GET', $url, $json);
 	}
 
@@ -95,7 +102,7 @@ class Curl
 	 * @param boolean $json
 	 * @return mixed
 	 */
-	public function post($url, $params=array(), $json=false)
+	public function post($url, $params=[], $json=false)
 	{
 		$this->setOption(CURLOPT_POSTFIELDS, http_build_query($params));
 		return $this->request('POST', $url, $json);
@@ -157,7 +164,7 @@ class Curl
 		/**
 		 * Setup error reporting and profiling.
 		 */
-		Yii::trace('Start sending cURL-Request: '.$url.'\n', __METHOD__);
+		Yii::trace("Sending cURL {$method} request: {$url}", __METHOD__);
 		Yii::beginProfile($profile, __METHOD__);
 
 		/**
@@ -185,8 +192,26 @@ class Curl
 			}
 		}
 
+		$headerSize=$this->getInfo(CURLINFO_HEADER_SIZE);
+
+		$this->response=(strlen($this->response)===$headerSize) ? '' : substr($body, $headerSize);
 		$this->responseCode=curl_getinfo($this->_curl, CURLINFO_HTTP_CODE);
-		$this->response=$body;
+
+		if($headerSize)
+		{
+			$headers=rtrim(substr($body, 0, $headerSize));
+			$headers=array_slice(preg_split('/(\\r?\\n)/', $headers), 1);
+
+			foreach($headers as $header)
+			{
+				$tmp=explode(': ', $header);
+
+				if(count($tmp)==2)
+				{
+					$this->_headers[$tmp[0]]=$tmp[1];
+				}
+			}
+		}
 
 		Yii::endProfile($profile, __METHOD__);
 
@@ -215,17 +240,7 @@ class Curl
 	 */
 	public function getInfo($opt=null)
 	{
-		if($this->_curl!==null && $opt===null)
-		{
-			return curl_getinfo($this->_curl);
-		}
-
-		if($this->_curl!==null && $opt!==null)
-		{
-			return curl_getinfo($this->_curl, $opt);
-		}
-
-		return [];
+		return $this->_curl!==null ? ($opt===null ? curl_getinfo($this->_curl) : curl_getinfo($this->_curl, $opt)) : [];
 	}
 
 	/**
@@ -270,15 +285,25 @@ class Curl
 		return $this;
 	}
 
-	/*
-	 * Sets cookie option.
+	/**
+	 * Get response headers.
 	 *
-	 * @param mixed $params
-	 * @return $this
+	 * @return array
 	 */
-	public function setCookies($params)
+	public function getHeaders()
 	{
-		return $this->setOption(CURLOPT_COOKIE, $params);
+		return $this->_headers;
+	}
+
+	/**
+	 * Get single response header.
+	 *
+	 * @param string $header
+	 * @return array
+	 */
+	public function getHeader($header)
+	{
+		return ArrayHelper::getValue($this->_headers, $header);
 	}
 
 	/**
@@ -290,6 +315,17 @@ class Curl
 	public function setHeaders($headers)
 	{
 		return $this->setOption(CURLOPT_HTTPHEADER, (array)$headers);
+	}
+
+	/*
+	 * Sets cookie option.
+	 *
+	 * @param mixed $params
+	 * @return $this
+	 */
+	public function setCookies($params)
+	{
+		return $this->setOption(CURLOPT_COOKIE, $params);
 	}
 
 	/**
@@ -313,10 +349,8 @@ class Curl
 	 */
 	public function setProxy($url, $port)
 	{
-		$this->setOption(CURLOPT_HTTPPROXYTUNNEL, true);
-		$this->setOption(CURLOPT_PROXY, $url.':'.$port);
-
-		return $this;
+		return $this->setOption(CURLOPT_HTTPPROXYTUNNEL, true)
+			->setOption(CURLOPT_PROXY, $url.':'.$port);
 	}
 
 	/**
@@ -329,6 +363,22 @@ class Curl
 	public function setProxyLogin($username='', $password='')
 	{
 		return $this->setOption(CURLOPT_PROXYUSERPWD, $username.':'.$password);
+	}
+
+	/**
+	 * @return $this
+	 */
+	public function followLocation()
+	{
+		return $this->setOption(CURLOPT_FOLLOWLOCATION, 1);
+	}
+
+	/**
+	 * @return $this
+	 */
+	public function withHeaders()
+	{
+		return $this->setOption(CURLOPT_HEADER, 1);
 	}
 
 	/**
@@ -349,7 +399,7 @@ class Curl
 	 */
 	public function unsetOptions()
 	{
-		$this->_options=array();
+		$this->_options=[];
 		return $this;
 	}
 
@@ -368,7 +418,8 @@ class Curl
 		$this->_curl=null;
 		$this->response=null;
 		$this->responseCode=null;
-		$this->_options=array();
+		$this->_options=[];
+		$this->_headers=[];
 
 		return $this;
 	}
